@@ -1,0 +1,55 @@
+#!/command/with-contenv /usr/bin/bash
+# shellcheck shell=bash
+
+declare -r log_prefix="[init-tesseract-langs]"
+
+install_languages() {
+	echo "Installing languages..."
+
+	read -ra langs <<<"$1"
+
+	# Check that it is not empty
+	if [ ${#langs[@]} -eq 0 ]; then
+		return
+	fi
+
+	if [ ! -n ${USER_IS_NON_ROOT} ]; then
+		apt-get update
+	fi
+
+	for lang in "${langs[@]}"; do
+		pkg="tesseract-ocr-$lang"
+
+		if [[ -n "${USER_IS_NON_ROOT}" ]]; then
+			echo "${log_prefix} ERROR: Unable to install language ${pkg} as non-root, startup may fail"
+			continue
+		fi
+
+		if dpkg --status "$pkg" &>/dev/null; then
+			echo "${log_prefix} Package $pkg already installed!"
+			continue
+		fi
+
+		if ! apt-cache show "$pkg" &>/dev/null; then
+			echo "${log_prefix} Package $pkg not found! :("
+			continue
+		fi
+
+		echo "Installing package $pkg..."
+		if ! apt-get --assume-yes install "$pkg" &>/dev/null; then
+			echo "${log_prefix} Could not install $pkg"
+			exit 1
+		fi
+	done
+}
+
+echo "${log_prefix} Checking if additional teseract languages needed"
+
+# Install additional languages if specified
+if [[ -n "$PAPERLESS_OCR_LANGUAGES" ]]; then
+
+	install_languages "$PAPERLESS_OCR_LANGUAGES"
+	echo "${log_prefix} Additional packages installed"
+else
+	echo "${log_prefix} No additional installs requested"
+fi
