@@ -250,6 +250,21 @@ class TestDocumentSearchApi(DirectoriesMixin, APITestCase):
             and document["url_field"] == "https://docs.paperless-ngx.com/",
         )
 
+    def test_filter_by_multiple_fields(self):
+        """
+        GIVEN:
+            - A document with `{"string_field": "https://docs.paperless-ngx.com/",
+              "url_field": "http://example.com/"}`
+        WHEN:
+            - Filtering by `['AND', [["string_field", "exists", True], ["url_field", "exists", True]]]`
+        THEN:
+            - That document should get matched.
+        """
+        self._assert_query_match_predicate(
+            ["AND", [["string_field", "exists", True], ["url_field", "exists", True]]],
+            lambda document: "url_field" in document and "string_field" in document,
+        )
+
     # ==========================================================#
     # Basic expressions supported by all custom field types     #
     # ==========================================================#
