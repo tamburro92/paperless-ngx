@@ -310,12 +310,13 @@ class CustomFieldLookupParser:
         documents based on custom field values.
 
         The syntax of the query expression is illustrated with the below pseudo code rules:
-        1. parse([`custom_field`, "exists", true])
-            -> Q(custom_fields__field=`custom_field`)
-        2. parse([`custom_field`, "exists", false])
-            -> ~Q(custom_fields__field=`custom_field`)
-        3. parse([`custom_field`, `op`, `value`])
-            -> Q(custom_fields__field=`custom_field`, custom_fields__value_`type`__`op`= `value`)
+        1. parse([`custom_field`, "exists", true]):
+            matches documents with Q(custom_fields__field=`custom_field`)
+        2. parse([`custom_field`, "exists", false]):
+            matches documents with ~Q(custom_fields__field=`custom_field`)
+        3. parse([`custom_field`, `op`, `value`]):
+            matches documents with
+            Q(custom_fields__field=`custom_field`, custom_fields__value_`type`__`op`= `value`)
         4. parse(["AND", [`q0`, `q1`, ..., `qn`]])
             -> parse(`q0`) & parse(`q1`) & ... & parse(`qn`)
         5. parse(["OR", [`q0`, `q1`, ..., `qn`]])
@@ -335,15 +336,18 @@ class CustomFieldLookupParser:
         self._validation_prefix = validation_prefix
         # Dummy ModelSerializer used to convert a Django models.Field to serializers.Field.
         self._model_serializer = serializers.ModelSerializer()
-        #
+        # Used for sanity check
         self._max_query_depth = max_query_depth
         self._max_atom_count = max_atom_count
         self._current_depth = 0
         self._atom_count = 0
+        # The set of annotations that we need to apply to the queryset
+        self._annotations = {}
 
-    def parse(self, query: str) -> Q:
+    def parse(self, query: str) -> tuple[Q, dict[str, Count]]:
         """
-        Parses the query string into a `django.db.models.Q`.
+        Parses the query string into a `django.db.models.Q`
+        and a set of annotations to be applied to the queryset.
         """
         try:
             expr = json.loads(query)
@@ -351,7 +355,10 @@ class CustomFieldLookupParser:
             raise serializers.ValidationError(
                 {self._validation_prefix: [_("Value must be valid JSON.")]},
             )
-        return self._parse_expr(expr, validation_prefix=self._validation_prefix)
+        return (
+            self._parse_expr(expr, validation_prefix=self._validation_prefix),
+            self._annotations,
+        )
 
     @handle_validation_prefix
     def _parse_expr(self, expr) -> Q:
@@ -428,12 +435,6 @@ class CustomFieldLookupParser:
             validation_prefix="2",
         )
 
-        has_field = Q(custom_fields__field=custom_field)
-
-        # Our special exists operator.
-        if op == "exists":
-            return has_field if value else ~has_field
-
         # Needed because not all DB backends support Array __contains
         if (
             custom_field.data_type == CustomField.FieldDataType.DOCUMENTLINK
@@ -444,7 +445,22 @@ class CustomFieldLookupParser:
         value_field_name = CustomFieldInstance.get_value_field_name(
             custom_field.data_type,
         )
-        return has_field & Q(**{f"custom_fields__{value_field_name}__{op}": value})
+        has_field = Q(custom_fields__field=custom_field)
+
+        # Our special exists operator.
+        if op == "exists":
+            field_filter = has_field if value else ~has_field
+        else:
+            field_filter = has_field & Q(
+                **{f"custom_fields__{value_field_name}__{op}": value},
+            )
+
+        # We need to use an annotation here because different atoms
+        # might be referring to different instances of custom fields.
+        annotation_name = f"_custom_field_filter_{len(self._annotations)}"
+        self._annotations[annotation_name] = Count("custom_fields", filter=field_filter)
+
+        return Q(**{f"{annotation_name}__gt": 0})
 
     @handle_validation_prefix
     def _get_custom_field(self, id_or_name):
@@ -655,9 +671,9 @@ class CustomFieldLookupFilter(Filter):
             max_query_depth=settings.CUSTOM_FIELD_LOOKUP_MAX_DEPTH,
             max_atom_count=settings.CUSTOM_FIELD_LOOKUP_MAX_ATOMS,
         )
-        q = parser.parse(value)
+        q, annotations = parser.parse(value)
 
-        return qs.filter(q)
+        return qs.annotate(**annotations).filter(q)
 
 
 class DocumentFilterSet(FilterSet):
