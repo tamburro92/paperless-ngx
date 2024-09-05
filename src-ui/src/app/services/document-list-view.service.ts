@@ -298,6 +298,9 @@ export class DocumentListViewService {
               errorMessage = Object.keys(error.error)
                 .map((fieldName) => {
                   const fieldError: Array<string> = error.error[fieldName]
+                  if (fieldName === 'custom_field_lookup') {
+                    return `Custom Field Query: ${JSON.stringify(fieldError)}`
+                  }
                   return `${this.sortFields.find((f) => f.field == fieldName)
                     ?.name}: ${fieldError[0]}`
                 })
