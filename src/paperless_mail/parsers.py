@@ -1,7 +1,6 @@
 import re
 from html import escape
 from pathlib import Path
-from typing import Optional
 
 from bleach import clean
 from bleach import linkify
@@ -33,7 +32,7 @@ class MailDocumentParser(DocumentParser):
 
     logging_name = "paperless.parsing.mail"
 
-    def _settings_to_gotenberg_pdfa(self) -> Optional[PdfAFormat]:
+    def _settings_to_gotenberg_pdfa(self) -> PdfAFormat | None:
         """
         Converts our requested PDF/A output into the Gotenberg API
         format
