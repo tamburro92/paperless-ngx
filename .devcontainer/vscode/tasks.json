@@ -21,9 +21,9 @@
 
 		},
 		{
-		"label": "manage.py document_index",
+		"label": "manage.py document_index reindex",
 		"type": "shell",
-		"command": "pipenv run python manage.py document_index",
+		"command": "pipenv run python manage.py document_index reindex",
 		"group": "build",
 		"presentation": {
 			"echo": true,
