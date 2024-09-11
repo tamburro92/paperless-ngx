@@ -874,9 +874,8 @@ class UnifiedSearchViewSet(DocumentViewSet):
             from documents import index
 
             try:
-                with index.open_index_searcher() as s:
-                    self.searcher = s
-                    return super().list(request)
+                self.searcher = index.open_index_searcher()
+                return super().list(request)
             except NotFound:
                 raise
             except Exception as e:
@@ -1194,19 +1193,25 @@ class GlobalSearchView(PassUserMixin):
             docs = all_docs.filter(title__icontains=query)
             if not db_only and len(docs) < OBJECT_LIMIT:
                 # If we don't have enough results, search by content
-                from documents import index
+                # from documents import index
 
-                with index.open_index_searcher() as s:
-                    fts_query = index.DelayedFullTextQuery(
-                        s,
-                        request.query_params,
-                        OBJECT_LIMIT,
-                        filter_queryset=all_docs,
-                    )
-                    results = fts_query[0:1]
-                    docs = docs | Document.objects.filter(
-                        id__in=[r["id"] for r in results],
-                    )
+                # fts_query = index.DelayedFullTextQuery(
+                #         request.query_params,
+                #         OBJECT_LIMIT,
+                #         filter_queryset=all_docs,
+                # )
+                # results = fts_query[0:1]
+                # docs = docs | Document.objects.filter(
+                #     id__in=[r["id"] for r in results],
+                # )
+                search = index.open_index_searcher().search(query=query, limit=OBJECT_LIMIT)
+                results = search["hits"]
+                docs = docs | Document.objects.filter(
+                    id__in=[r["id"] for r in results],
+                )
+
+
+
             docs = docs[:OBJECT_LIMIT]
         saved_views = (
             SavedView.objects.filter(owner=request.user, name__icontains=query)

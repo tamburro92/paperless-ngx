@@ -1,5 +1,6 @@
-import logging
-import math
+import logging  # noqa: EXE002
+
+#import math
 import os
 from collections import Counter
 from contextlib import contextmanager
@@ -8,38 +9,39 @@ from datetime import timezone
 from shutil import rmtree
 from typing import Optional
 
+import tantivy
 from django.conf import settings
 from django.db.models import QuerySet
 from django.utils import timezone as django_timezone
 from guardian.shortcuts import get_users_with_perms
-from whoosh import classify
-from whoosh import highlight
-from whoosh import query
-from whoosh.fields import BOOLEAN
-from whoosh.fields import DATETIME
-from whoosh.fields import KEYWORD
-from whoosh.fields import NUMERIC
-from whoosh.fields import TEXT
-from whoosh.fields import Schema
-from whoosh.highlight import HtmlFormatter
-from whoosh.idsets import BitSet
-from whoosh.idsets import DocIdSet
-from whoosh.index import FileIndex
-from whoosh.index import create_in
-from whoosh.index import exists_in
-from whoosh.index import open_dir
-from whoosh.qparser import MultifieldParser
-from whoosh.qparser import QueryParser
-from whoosh.qparser.dateparse import DateParserPlugin
-from whoosh.qparser.dateparse import English
-from whoosh.qparser.plugins import FieldsPlugin
-from whoosh.reading import IndexReader
-from whoosh.scoring import TF_IDF
-from whoosh.searching import ResultsPage
-from whoosh.searching import Searcher
-from whoosh.util.times import timespan
-from whoosh.writing import AsyncWriter
 
+# from whoosh import classify
+# from whoosh import highlight
+# from whoosh import query
+# from whoosh.fields import BOOLEAN
+# from whoosh.fields import DATETIME
+# from whoosh.fields import KEYWORD
+# from whoosh.fields import NUMERIC
+# from whoosh.fields import TEXT
+# from whoosh.fields import Schema
+# from whoosh.highlight import HtmlFormatter
+# from whoosh.idsets import BitSet
+# from whoosh.idsets import DocIdSet
+# from whoosh.index import FileIndex
+# from whoosh.index import create_in
+# from whoosh.index import exists_in
+# from whoosh.index import open_dir
+# from whoosh.qparser import MultifieldParser
+# from whoosh.qparser import QueryParser
+# from whoosh.qparser.dateparse import DateParserPlugin
+# from whoosh.qparser.dateparse import English
+# from whoosh.qparser.plugins import FieldsPlugin
+# from whoosh.reading import IndexReader
+# from whoosh.scoring import TF_IDF
+# from whoosh.searching import ResultsPage
+# from whoosh.searching import Searcher
+# from whoosh.util.times import timespan
+# from whoosh.writing import AsyncWriter
 from documents.models import CustomFieldInstance
 from documents.models import Document
 from documents.models import Note
@@ -49,81 +51,91 @@ logger = logging.getLogger("paperless.index")
 
 
 def get_schema():
-    return Schema(
-        id=NUMERIC(stored=True, unique=True),
-        title=TEXT(sortable=True),
-        content=TEXT(),
-        asn=NUMERIC(sortable=True, signed=False),
-        correspondent=TEXT(sortable=True),
-        correspondent_id=NUMERIC(),
-        has_correspondent=BOOLEAN(),
-        tag=KEYWORD(commas=True, scorable=True, lowercase=True),
-        tag_id=KEYWORD(commas=True, scorable=True),
-        has_tag=BOOLEAN(),
-        type=TEXT(sortable=True),
-        type_id=NUMERIC(),
-        has_type=BOOLEAN(),
-        created=DATETIME(sortable=True),
-        modified=DATETIME(sortable=True),
-        added=DATETIME(sortable=True),
-        path=TEXT(sortable=True),
-        path_id=NUMERIC(),
-        has_path=BOOLEAN(),
-        notes=TEXT(),
-        num_notes=NUMERIC(sortable=True, signed=False),
-        custom_fields=TEXT(),
-        custom_field_count=NUMERIC(sortable=True, signed=False),
-        has_custom_fields=BOOLEAN(),
-        custom_fields_id=KEYWORD(commas=True),
-        owner=TEXT(),
-        owner_id=NUMERIC(),
-        has_owner=BOOLEAN(),
-        viewer_id=KEYWORD(commas=True),
-        checksum=TEXT(),
-        original_filename=TEXT(sortable=True),
-        is_shared=BOOLEAN(),
-    )
+    tokenizer = "en_stem"
+    schema_builder = tantivy.SchemaBuilder()
+
+    schema_builder.add_unsigned_field("doc_id", stored=True)
+    schema_builder.add_text_field("title", stored=True, tokenizer_name=tokenizer)
+    schema_builder.add_text_field("content", stored=False, tokenizer_name=tokenizer)
+    schema_builder.add_unsigned_field("asn", stored=True)
+    schema_builder.add_text_field("correspondent", stored=True)
+    schema_builder.add_unsigned_field("correspondent_id", stored=True)
+    schema_builder.add_boolean_field("has_correspondent", stored=True)
+    schema_builder.add_text_field("tag", stored=True)
+    schema_builder.add_unsigned_field("tag_id", stored=True)
+    schema_builder.add_boolean_field("has_tag", stored=True)
+    schema_builder.add_text_field("type", stored=True)
+    schema_builder.add_integer_field("type_id", stored=True)
+    schema_builder.add_boolean_field("has_type", stored=True)
+    schema_builder.add_date_field("created", stored=True)
+    schema_builder.add_date_field("modified", stored=True)
+    schema_builder.add_date_field("added", stored=True)
+    schema_builder.add_text_field("path", stored=True)
+    schema_builder.add_unsigned_field("path_id", stored=True)
+    schema_builder.add_boolean_field("has_path", stored=True)
+    schema_builder.add_text_field("notes", stored=True, tokenizer_name=tokenizer)
+    schema_builder.add_unsigned_field("num_notes", stored=True)
+    schema_builder.add_text_field("custom_fields", stored=True)
+    schema_builder.add_unsigned_field("custom_field_count", stored=True)
+    schema_builder.add_boolean_field("has_custom_fields", stored=True)
+    schema_builder.add_unsigned_field("custom_fields_id", stored=True)
+    schema_builder.add_text_field("owner", stored=True)
+    schema_builder.add_unsigned_field("owner_id", stored=True)
+    schema_builder.add_boolean_field("has_owner", stored=True)
+    schema_builder.add_unsigned_field("viewer_id", stored=True)
+    schema_builder.add_text_field("checksum", stored=True)
+    schema_builder.add_text_field("original_filename", stored=True)
+    schema_builder.add_boolean_field("is_shared", stored=True)
+
+    schema = schema_builder.build()
+
+    return schema
 
 
-def open_index(recreate=False) -> FileIndex:
+def optimize():
+    writer = open_index().writer()
+    writer.garbage_collect_files()
+    writer.wait_merging_threads()
+
+def open_index(recreate=False): #-> FileIndex:
     try:
-        if exists_in(settings.INDEX_DIR) and not recreate:
-            return open_dir(settings.INDEX_DIR, schema=get_schema())
+        return tantivy.Index(schema=get_schema(), path=str(settings.INDEX_DIR), reuse=not recreate)
     except Exception:
         logger.exception("Error while opening the index, recreating.")
 
-    # create_in doesn't handle corrupted indexes very well, remove the directory entirely first
-    if os.path.isdir(settings.INDEX_DIR):
-        rmtree(settings.INDEX_DIR)
-    settings.INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    if os.path.isdir(str(settings.INDEX_DIR)):
+        rmtree(str(settings.INDEX_DIR))
+    os.mkdir(str(settings.INDEX_DIR))
 
-    return create_in(settings.INDEX_DIR, get_schema())
+    return tantivy.Index(schema=get_schema(), path=str(settings.INDEX_DIR), reuse=False)
 
 
 @contextmanager
-def open_index_writer(optimize=False) -> AsyncWriter:
-    writer = AsyncWriter(open_index())
+def open_index_writer(): # -> AsyncWriter:
+    writer = open_index().writer()
 
     try:
         yield writer
     except Exception as e:
         logger.exception(str(e))
-        writer.cancel()
+        writer.rollback()
+    else:
+        writer.commit()
     finally:
-        writer.commit(optimize=optimize)
+        writer.wait_merging_threads()
 
 
-@contextmanager
-def open_index_searcher() -> Searcher:
-    searcher = open_index().searcher()
+#@contextmanager
+def open_index_searcher(): # -> Searcher:
+    return open_index().searcher()
 
-    try:
-        yield searcher
-    finally:
-        searcher.close()
+#    try:
+#        yield searcher
+#    finally:
+#        searcher.close()
 
 
-def update_document(writer: AsyncWriter, doc: Document):
+def update_document(writer, doc: Document):
     tags = ",".join([t.name for t in doc.tags.all()])
     tags_ids = ",".join([str(t.id) for t in doc.tags.all()])
     notes = ",".join([str(c.note) for c in Note.objects.filter(document=doc)])
@@ -150,8 +162,8 @@ def update_document(writer: AsyncWriter, doc: Document):
         only_with_perms_in=["view_document"],
     )
     viewer_ids = ",".join([str(u.id) for u in users_with_perms])
-    writer.update_document(
-        id=doc.pk,
+    tdoc = dict(
+        doc_id=doc.pk,
         title=doc.title,
         content=doc.content,
         correspondent=doc.correspondent.name if doc.correspondent else None,
@@ -163,10 +175,10 @@ def update_document(writer: AsyncWriter, doc: Document):
         type=doc.document_type.name if doc.document_type else None,
         type_id=doc.document_type.id if doc.document_type else None,
         has_type=doc.document_type is not None,
-        created=doc.created,
-        added=doc.added,
+        created=doc.created.timestamp(),
+        added=doc.added.timestamp(),
         asn=asn,
-        modified=doc.modified,
+        modified=doc.modified.timestamp(),
         path=doc.storage_path.name if doc.storage_path else None,
         path_id=doc.storage_path.id if doc.storage_path else None,
         has_path=doc.storage_path is not None,
@@ -184,14 +196,24 @@ def update_document(writer: AsyncWriter, doc: Document):
         original_filename=doc.original_filename,
         is_shared=len(viewer_ids) > 0,
     )
+    tdoc_no_none = {k: v for k, v in tdoc.items() if v is not None}
+
+    writer.add_document(tantivy.Document(**tdoc_no_none))
+
+    writer.commit()
 
 
-def remove_document(writer: AsyncWriter, doc: Document):
+def remove_document(writer, doc: Document):
     remove_document_by_id(writer, doc.pk)
+    writer.commit()
 
 
-def remove_document_by_id(writer: AsyncWriter, doc_id):
-    writer.delete_by_term("id", doc_id)
+def remove_document_by_id(writer, doc_id):
+    writer.delete_documents("doc_id", doc_id)
+
+def remove_document_from_index(document: Document):
+    with open_index_writer() as writer:
+        remove_document(writer, document)
 
 
 def add_or_update_document(document: Document):
@@ -199,32 +221,27 @@ def add_or_update_document(document: Document):
         update_document(writer, document)
 
 
-def remove_document_from_index(document: Document):
-    with open_index_writer() as writer:
-        remove_document(writer, document)
 
+# class MappedDocIdSet:
+#     """
+#     A DocIdSet backed by a set of `Document` IDs.
+#     Supports efficiently looking up if a whoosh docnum is in the provided `filter_queryset`.
+#     """
 
-class MappedDocIdSet(DocIdSet):
-    """
-    A DocIdSet backed by a set of `Document` IDs.
-    Supports efficiently looking up if a whoosh docnum is in the provided `filter_queryset`.
-    """
+#     def __init__(self, filter_queryset: QuerySet, searcher: tantivy.Searcher) -> None:
+#         super().__init__()
+#         document_ids = filter_queryset.order_by("id").values_list("id", flat=True)
+#         self.document_ids = list(document_ids)
+#         self.searcher = searcher
 
-    def __init__(self, filter_queryset: QuerySet, ixreader: IndexReader) -> None:
-        super().__init__()
-        document_ids = filter_queryset.order_by("id").values_list("id", flat=True)
-        max_id = document_ids.last() or 0
-        self.document_ids = BitSet(document_ids, size=max_id)
-        self.ixreader = ixreader
+#     def __contains__(self, docnum):
+#         document_id = self.searcher.doc(docnum)["id"]
+#         return document_id in self.document_ids
 
-    def __contains__(self, docnum):
-        document_id = self.ixreader.stored_fields(docnum)["id"]
-        return document_id in self.document_ids
-
-    def __bool__(self):
-        # searcher.search ignores a filter if it's "falsy".
-        # We use this hack so this DocIdSet, when used as a filter, is never ignored.
-        return True
+#     def __bool__(self):
+#         # searcher.search ignores a filter if it's "falsy".
+#         # We use this hack so this DocIdSet, when used as a filter, is never ignored.
+#         return True
 
 
 class DelayedQuery:
@@ -262,7 +279,7 @@ class DelayedQuery:
 
     def __init__(
         self,
-        searcher: Searcher,
+        searcher: tantivy.Searcher,
         query_params,
         page_size,
         filter_queryset: QuerySet,
@@ -285,105 +302,103 @@ class DelayedQuery:
         q, mask = self._get_query()
         sortedby, reverse = self._get_query_sortedby()
 
-        page: ResultsPage = self.searcher.search_page(
+        page = self.searcher.search(
             q,
-            mask=mask,
-            filter=MappedDocIdSet(self.filter_queryset, self.searcher.ixreader),
-            pagenum=math.floor(item.start / self.page_size) + 1,
-            pagelen=self.page_size,
-            sortedby=sortedby,
-            reverse=reverse,
+            offset = item.start,
+            count = self.page_size,
+            order_by_field = sortedby,
+            reverse = "desc" if reverse else "asc",
         )
-        page.results.fragmenter = highlight.ContextFragmenter(surround=50)
-        page.results.formatter = HtmlFormatter(tagname="span", between=" ... ")
+        #page.results.fragmenter = highlight.ContextFragmenter(surround=50)
+        #page.results.formatter = HtmlFormatter(tagname="span", between=" ... ")
 
-        if not self.first_score and len(page.results) > 0 and sortedby is None:
-            self.first_score = page.results[0].score
+        #i#f not self.first_score and len(page.results) > 0 and sortedby is None:
+        #    self.first_score = page.results[0].score
 
-        page.results.top_n = list(
-            map(
-                lambda hit: (
-                    (hit[0] / self.first_score) if self.first_score else None,
-                    hit[1],
-                ),
-                page.results.top_n,
-            ),
-        )
+        #page.results.top_n = list(
+        #    map(
+        #        lambda hit: (
+        #            (hit[0] / self.first_score) if self.first_score else None,
+        #            hit[1],
+        #        ),
+        #        page.results.top_n,
+        #    ),
+        #)
 
-        self.saved_results[item.start] = page
+        #self.saved_results[item.start] = page
 
         return page
 
 
-class LocalDateParser(English):
-    def reverse_timezone_offset(self, d):
-        return (d.replace(tzinfo=django_timezone.get_current_timezone())).astimezone(
-            timezone.utc,
-        )
+# class LocalDateParser(English):
+#     def reverse_timezone_offset(self, d):
+#         return (d.replace(tzinfo=django_timezone.get_current_timezone())).astimezone(
+#             timezone.utc,
+#         )
 
-    def date_from(self, *args, **kwargs):
-        d = super().date_from(*args, **kwargs)
-        if isinstance(d, timespan):
-            d.start = self.reverse_timezone_offset(d.start)
-            d.end = self.reverse_timezone_offset(d.end)
-        elif isinstance(d, datetime):
-            d = self.reverse_timezone_offset(d)
-        return d
-
-
-class DelayedFullTextQuery(DelayedQuery):
-    def _get_query(self):
-        q_str = self.query_params["query"]
-        qp = MultifieldParser(
-            [
-                "content",
-                "title",
-                "correspondent",
-                "tag",
-                "type",
-                "notes",
-                "custom_fields",
-            ],
-            self.searcher.ixreader.schema,
-        )
-        qp.add_plugin(
-            DateParserPlugin(
-                basedate=django_timezone.now(),
-                dateparser=LocalDateParser(),
-            ),
-        )
-        q = qp.parse(q_str)
-
-        corrected = self.searcher.correct_query(q, q_str)
-        if corrected.query != q:
-            corrected.query = corrected.string
-
-        return q, None
+#     def date_from(self, *args, **kwargs):
+#         d = super().date_from(*args, **kwargs)
+#         if isinstance(d, timespan):
+#             d.start = self.reverse_timezone_offset(d.start)
+#             d.end = self.reverse_timezone_offset(d.end)
+#         elif isinstance(d, datetime):
+#             d = self.reverse_timezone_offset(d)
+#         return d
 
 
-class DelayedMoreLikeThisQuery(DelayedQuery):
-    def _get_query(self):
-        more_like_doc_id = int(self.query_params["more_like_id"])
-        content = Document.objects.get(id=more_like_doc_id).content
+# class DelayedFullTextQuery(DelayedQuery):
+#     def _get_query(self):
+#         q_str = self.query_params["query"]
+#         qp = MultifieldParser(
+#             [
+#                 "content",
+#                 "title",
+#                 "correspondent",
+#                 "tag",
+#                 "type",
+#                 "notes",
+#                 "custom_fields",
+#             ],
+#             self.searcher.ixreader.schema,
+#         )
+#         qp.add_plugin(
+#             DateParserPlugin(
+#                 basedate=django_timezone.now(),
+#                 dateparser=LocalDateParser(),
+#             ),
+#         )
+#         q = qp.parse(q_str)
 
-        docnum = self.searcher.document_number(id=more_like_doc_id)
-        kts = self.searcher.key_terms_from_text(
-            "content",
-            content,
-            numterms=20,
-            model=classify.Bo1Model,
-            normalize=False,
-        )
-        q = query.Or(
-            [query.Term("content", word, boost=weight) for word, weight in kts],
-        )
-        mask = {docnum}
+#         corrected = self.searcher.correct_query(q, q_str)
+#         if corrected.query != q:
+#             corrected.query = corrected.string
 
-        return q, mask
+#         return q, None
+
+
+# class DelayedMoreLikeThisQuery(DelayedQuery):
+#     def _get_query(self):
+#         more_like_doc_id = int(self.query_params["more_like_id"])
+#         content = Document.objects.get(id=more_like_doc_id).content
+
+#         docnum = self.searcher.document_number(id=more_like_doc_id)
+#         kts = self.searcher.key_terms_from_text(
+#             "content",
+#             content,
+#             numterms=20,
+#             model=classify.Bo1Model,
+#             normalize=False,
+#         )
+#         q = query.Or(
+#             [query.Term("content", word, boost=weight) for word, weight in kts],
+#         )
+#         mask = {docnum}
+
+#         return q, mask
 
 
 def autocomplete(
-    ix: FileIndex,
+    ix: tantivy.Index,
     term: str,
     limit: int = 10,
     user: Optional[User] = None,
@@ -393,43 +408,39 @@ def autocomplete(
     and without scoring
     """
     terms = []
+    s = ix.searcher()
+    q = ix.parse_query(term, ["content"])
 
-    with ix.searcher(weighting=TF_IDF()) as s:
-        qp = QueryParser("content", schema=ix.schema)
-        # Don't let searches with a query that happen to match a field override the
-        # content field query instead and return bogus, not text data
-        qp.remove_plugin_class(FieldsPlugin)
-        q = qp.parse(f"{term.lower()}*")
-        user_criterias = get_permissions_criterias(user)
+    #user_criterias = get_permissions_criterias(user)
 
-        results = s.search(
-            q,
-            terms=True,
-            filter=query.Or(user_criterias) if user_criterias is not None else None,
-        )
+    results = s.search(
+        query=q,
+        #filter=query.Or(user_criterias) if user_criterias is not None else None,
+    )
 
-        termCounts = Counter()
-        if results.has_matched_terms():
-            for hit in results:
-                for _, match in hit.matched_terms():
-                    termCounts[match] += 1
-            terms = [t for t, _ in termCounts.most_common(limit)]
+    termCounts = Counter()
+    if results.has_matched_terms():
+        for hit in results:
+            for _, match in hit.matched_terms():
+                termCounts[match] += 1
+        terms = [t for t, _ in termCounts.most_common(limit)]
 
-        term_encoded = term.encode("UTF-8")
-        if term_encoded in terms:
-            terms.insert(0, terms.pop(terms.index(term_encoded)))
+    term_encoded = term.encode("UTF-8")
+    if term_encoded in terms:
+        terms.insert(0, terms.pop(terms.index(term_encoded)))
 
     return terms
 
 
 def get_permissions_criterias(user: Optional[User] = None):
-    user_criterias = [query.Term("has_owner", False)]
-    if user is not None:
-        if user.is_superuser:  # superusers see all docs
-            user_criterias = []
-        else:
-            user_criterias.append(query.Term("owner_id", user.id))
-            user_criterias.append(
-                query.Term("viewer_id", str(user.id)),
-            )
-    return user_criterias
+    return [False]
+    # user_criterias = [query.Term("has_owner", False)]
+    # if user is not None:
+    #     if user.is_superuser:  # superusers see all docs
+    #         user_criterias = []
+    #     else:
+    #         user_criterias.append(query.Term("owner_id", user.id))
+    #         user_criterias.append(
+    #             query.Term("viewer_id", str(user.id)),
+    #         )
+    # return user_criterias
