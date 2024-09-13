@@ -296,7 +296,7 @@ SCRATCH_DIR = __get_path(
 env_apps = __get_list("PAPERLESS_APPS")
 
 INSTALLED_APPS = [
-    "whitenoise.runserver_nostatic",
+    "servestatic.runserver_nostatic",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -344,7 +344,7 @@ if DEBUG:
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "servestatic.middleware.ServeStaticMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.locale.LocaleMiddleware",
@@ -364,7 +364,7 @@ if __get_boolean("PAPERLESS_ENABLE_COMPRESSION", "yes"):  # pragma: no cover
 ROOT_URLCONF = "paperless.urls"
 
 
-def _parse_base_paths() -> tuple[str, str, str, str, str]:
+def _parse_base_paths() -> tuple[str | None, str, str, str, str]:
     script_name = os.getenv("PAPERLESS_FORCE_SCRIPT_NAME")
     base_url = (script_name or "") + "/"
     login_url = base_url + "accounts/login/"
@@ -384,12 +384,12 @@ WSGI_APPLICATION = "paperless.wsgi.application"
 ASGI_APPLICATION = "paperless.asgi.application"
 
 STATIC_URL = os.getenv("PAPERLESS_STATIC_URL", BASE_URL + "static/")
-WHITENOISE_STATIC_PREFIX = "/static/"
+SERVESTATIC_STATIC_PREFIX = "/static/"
 
 if machine().lower() == "aarch64":  # pragma: no cover
     _static_backend = "django.contrib.staticfiles.storage.StaticFilesStorage"
 else:
-    _static_backend = "whitenoise.storage.CompressedStaticFilesStorage"
+    _static_backend = "servestatic.storage.CompressedManifestStaticFilesStorage"
 
 STORAGES = {
     "staticfiles": {
