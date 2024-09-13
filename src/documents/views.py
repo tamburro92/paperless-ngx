@@ -196,18 +196,14 @@ class IndexView(TemplateView):
         context["cookie_prefix"] = settings.COOKIE_PREFIX
         context["username"] = self.request.user.username
         context["full_name"] = self.request.user.get_full_name()
-        context["styles_css"] = f"frontend/{self.get_frontend_language()}/styles.css"
-        context["runtime_js"] = f"frontend/{self.get_frontend_language()}/runtime.js"
-        context["polyfills_js"] = (
-            f"frontend/{self.get_frontend_language()}/polyfills.js"
-        )
-        context["main_js"] = f"frontend/{self.get_frontend_language()}/main.js"
-        context["webmanifest"] = (
-            f"frontend/{self.get_frontend_language()}/manifest.webmanifest"
-        )
-        context["apple_touch_icon"] = (
-            f"frontend/{self.get_frontend_language()}/apple-touch-icon.png"
-        )
+
+        frontend_lang = self.get_frontend_language()
+        context["styles_css"] = f"frontend/{frontend_lang}/styles.css"
+        context["runtime_js"] = f"frontend/{frontend_lang}/runtime.js"
+        context["polyfills_js"] = f"frontend/{frontend_lang}/polyfills.js"
+        context["main_js"] = f"frontend/{frontend_lang}/main.js"
+        context["webmanifest"] = f"frontend/{frontend_lang}/manifest.webmanifest"
+        context["apple_touch_icon"] = f"frontend/{frontend_lang}/apple-touch-icon.png"
         return context
 
 

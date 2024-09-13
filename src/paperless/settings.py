@@ -251,7 +251,7 @@ DEBUG = __get_boolean("PAPERLESS_DEBUG", "NO")
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
 # TODO: Revert this
-STATIC_ROOT = str(__get_path("PAPERLESS_STATICDIR", BASE_DIR.parent / "static"))
+STATIC_ROOT = __get_path("PAPERLESS_STATICDIR", BASE_DIR.parent / "static")
 
 MEDIA_ROOT = __get_path("PAPERLESS_MEDIA_ROOT", BASE_DIR.parent / "media")
 ORIGINALS_DIR = MEDIA_ROOT / "documents" / "originals"
@@ -386,12 +386,11 @@ ASGI_APPLICATION = "paperless.asgi.application"
 
 STATIC_URL = os.getenv("PAPERLESS_STATIC_URL", BASE_URL + "static/")
 SERVESTATIC_STATIC_PREFIX = "/static/"
-# SERVESTATIC_MANIFEST_STRICT = False
 
 if machine().lower() == "aarch64":  # pragma: no cover
     _static_backend = "django.contrib.staticfiles.storage.StaticFilesStorage"
 else:
-    _static_backend = "servestatic.storage.CompressedManifestStaticFilesStorage"
+    _static_backend = "servestatic.storage.CompressedStaticFilesStorage"
 
 STORAGES = {
     "staticfiles": {
