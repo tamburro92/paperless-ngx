@@ -15,33 +15,7 @@ from django.db.models import QuerySet
 from django.utils import timezone as django_timezone
 from guardian.shortcuts import get_users_with_perms
 
-# from whoosh import classify
-# from whoosh import highlight
-# from whoosh import query
-# from whoosh.fields import BOOLEAN
-# from whoosh.fields import DATETIME
-# from whoosh.fields import KEYWORD
-# from whoosh.fields import NUMERIC
-# from whoosh.fields import TEXT
-# from whoosh.fields import Schema
-# from whoosh.highlight import HtmlFormatter
-# from whoosh.idsets import BitSet
-# from whoosh.idsets import DocIdSet
-# from whoosh.index import FileIndex
-# from whoosh.index import create_in
-# from whoosh.index import exists_in
-# from whoosh.index import open_dir
-# from whoosh.qparser import MultifieldParser
-# from whoosh.qparser import QueryParser
-# from whoosh.qparser.dateparse import DateParserPlugin
-# from whoosh.qparser.dateparse import English
-# from whoosh.qparser.plugins import FieldsPlugin
-# from whoosh.reading import IndexReader
-# from whoosh.scoring import TF_IDF
-# from whoosh.searching import ResultsPage
-# from whoosh.searching import Searcher
-# from whoosh.util.times import timespan
-# from whoosh.writing import AsyncWriter
+
 from documents.models import CustomFieldInstance
 from documents.models import Document
 from documents.models import Note
@@ -305,9 +279,9 @@ class DelayedQuery:
         page = self.searcher.search(
             q,
             offset = item.start,
-            count = self.page_size,
+            limit = self.page_size,
             order_by_field = sortedby,
-            reverse = "desc" if reverse else "asc",
+            order = tantivy.Order.Desc if reverse else tantivy.Order.Asc,
         )
         #page.results.fragmenter = highlight.ContextFragmenter(surround=50)
         #page.results.formatter = HtmlFormatter(tagname="span", between=" ... ")
@@ -326,8 +300,8 @@ class DelayedQuery:
         #)
 
         #self.saved_results[item.start] = page
-
-        return page
+        results = [self.searcher.doc(doc_id).to_dict() for (score, doc_id) in page.hits]
+        return results
 
 
 # class LocalDateParser(English):
@@ -346,34 +320,31 @@ class DelayedQuery:
 #         return d
 
 
-# class DelayedFullTextQuery(DelayedQuery):
-#     def _get_query(self):
-#         q_str = self.query_params["query"]
-#         qp = MultifieldParser(
-#             [
-#                 "content",
-#                 "title",
-#                 "correspondent",
-#                 "tag",
-#                 "type",
-#                 "notes",
-#                 "custom_fields",
-#             ],
-#             self.searcher.ixreader.schema,
-#         )
-#         qp.add_plugin(
-#             DateParserPlugin(
-#                 basedate=django_timezone.now(),
-#                 dateparser=LocalDateParser(),
-#             ),
-#         )
-#         q = qp.parse(q_str)
+class DelayedFullTextQuery(DelayedQuery):
+    def _get_query(self):
+        q_str = self.query_params["query"]
+        index = open_index()
+        q = index.parse_query(q_str, [
+            "content",
+            "title",
+            "correspondent",
+            "tag",
+            "type",
+            "notes",
+            "custom_fields",
+        ])
+        # qp.add_plugin(
+        #     DateParserPlugin(
+        #         basedate=django_timezone.now(),
+        #         dateparser=LocalDateParser(),
+        #     ),
+        # )
 
-#         corrected = self.searcher.correct_query(q, q_str)
-#         if corrected.query != q:
-#             corrected.query = corrected.string
+        # corrected = self.searcher.correct_query(q, q_str)
+        # if corrected.query != q:
+        #     corrected.query = corrected.string
 
-#         return q, None
+        return q, None
 
 
 # class DelayedMoreLikeThisQuery(DelayedQuery):
@@ -418,6 +389,7 @@ def autocomplete(
         #filter=query.Or(user_criterias) if user_criterias is not None else None,
     )
 
+    print(results)
     termCounts = Counter()
     if results.has_matched_terms():
         for hit in results:
