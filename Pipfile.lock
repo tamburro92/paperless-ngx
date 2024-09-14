@@ -1895,11 +1895,11 @@
                 "brotli"
             ],
             "hashes": [
-                "sha256:596009a1e9174e22bbe740c0fab01e6f637bd008cd205aa0d0880cdbda84efe4",
-                "sha256:f079c40a2930e8241f52d3a562295aa1a7d7d9f2a8f88db0ccaa8d0859eed560"
+                "sha256:0b0881572cf36b88e18ef5b2c76c40c71b1bf1b6e8065f69b1923614e7339fc4",
+                "sha256:6cc8b857e05f9e5438662479605a37810baba5361abefe975f32df2959ebeba4"
             ],
             "markers": "python_version >= '3.9'",
-            "version": "==2.0.0"
+            "version": "==2.0.1"
         },
         "setproctitle": {
             "hashes": [
@@ -3426,11 +3426,11 @@
         },
         "platformdirs": {
             "hashes": [
-                "sha256:9e5e27a08aa095dd127b9f2e764d74254f482fef22b0970773bfba79d091ab8c",
-                "sha256:eb1c8582560b34ed4ba105009a4badf7f6f85768b30126f351328507b2beb617"
+                "sha256:50a5450e2e84f44539718293cbb1da0a0885c9d14adf21b77bae4e66fc99d9b5",
+                "sha256:d4e0b7d8ec176b341fb03cb11ca12d0276faa8c485f9cd218f613840463fc2c0"
             ],
             "markers": "python_version >= '3.8'",
-            "version": "==4.3.2"
+            "version": "==4.3.3"
         },
         "pluggy": {
             "hashes": [
