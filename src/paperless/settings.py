@@ -345,7 +345,7 @@ if DEBUG:
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "servestatic.middleware.ServeStaticMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.locale.LocaleMiddleware",
@@ -385,7 +385,7 @@ WSGI_APPLICATION = "paperless.wsgi.application"
 ASGI_APPLICATION = "paperless.asgi.application"
 
 STATIC_URL = os.getenv("PAPERLESS_STATIC_URL", BASE_URL + "static/")
-SERVESTATIC_STATIC_PREFIX = "/static/"
+SERVESTATIC_STATIC_PREFIX = WHITENOISE_STATIC_PREFIX = "/static/"
 
 if machine().lower() == "aarch64":  # pragma: no cover
     _static_backend = "django.contrib.staticfiles.storage.StaticFilesStorage"
