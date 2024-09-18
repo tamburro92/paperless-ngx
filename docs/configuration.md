@@ -606,10 +606,10 @@ You can optionally also automatically redirect users to the SSO login with [PAPE
 
     Defaults to False
 
-#### [`PAPERLESS_ACCOUNT_SESSION_REMEMBER=<bool>`](#PAPERLESS_ACCOUNT_SESSION_REMEMBER) {#PAPERLESS_ACCOUNT_SESSION_REMEMBER}
+#### [`PAPERLESS_SESSION_COOKIE_AGE=<bool>`](#PAPERLESS_SESSION_COOKIE_AGE) {#PAPERLESS_SESSION_COOKIE_AGE}
 
 : See the corresponding
-[django-allauth documentation](https://docs.allauth.org/en/latest/account/configuration.html)
+[django documentation](https://docs.djangoproject.com/en/5.1/ref/settings/#std-setting-SESSION_COOKIE_AGE)
 
 ## OCR settings {#ocr}
 
