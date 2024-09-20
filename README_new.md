@@ -10,6 +10,8 @@
 
     apt install redis
 
+    #apt install celery
+
 ## Install postgresql and configure a database
 
     apt install postgresql postgresql-contrib
@@ -64,10 +66,13 @@ copy script services to systemd
 
 Then to uncomment Require=paperless-webserver.socket from paperless-webserver.service to start server 80 port
 
-The start services
+Then start services
 
-    sudo systemctl start paperless-webserver.socket
-    sudo systemctl enable paperless-webserver.socket
+    sudo systemctl enable paperless-webserver.socket --now
+    sudo systemctl enable paperless-webserver.service --now
+    sudo systemctl enable paperless-consumer.service --now
+    sudo systemctl enable paperless-scheduler.service --now
+    sudo systemctl enable paperless-task-queue.service --now
 
 # Development
 
